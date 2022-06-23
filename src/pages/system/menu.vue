@@ -14,7 +14,51 @@
           </template>
         </t-input>
       </t-row>
+      <div class="table-container">
+        <t-table
+          :columns="columns"
+          :data="data"
+          :rowKey="rowKey"
+          :verticalAlign="verticalAlign"
+          :hover="hover"
+          :pagination="pagination"
+          :selected-row-keys="selectedRowKeys"
+          :loading="dataLoading"
+          @page-change="rehandlePageChange"
+          @change="rehandleChange"
+          @select-change="rehandleSelectChange"
+          :headerAffixedTop="true"
+          :headerAffixProps="{ offsetTop: offsetTop, container: getContainer }"
+        >
+          <template #status="{ row }">
+            <t-tag v-if="row.status === CONTRACT_STATUS.FAIL" theme="danger" variant="light">审核失败</t-tag>
+            <t-tag v-if="row.status === CONTRACT_STATUS.AUDIT_PENDING" theme="warning" variant="light">待审核</t-tag>
+            <t-tag v-if="row.status === CONTRACT_STATUS.EXEC_PENDING" theme="warning" variant="light">待履行</t-tag>
+            <t-tag v-if="row.status === CONTRACT_STATUS.EXECUTING" theme="success" variant="light">履行中</t-tag>
+            <t-tag v-if="row.status === CONTRACT_STATUS.FINISH" theme="success" variant="light">已完成</t-tag>
+          </template>
+          <template #contractType="{ row }">
+            <p v-if="row.contractType === CONTRACT_TYPES.MAIN">审核失败</p>
+            <p v-if="row.contractType === CONTRACT_TYPES.SUB">待审核</p>
+            <p v-if="row.contractType === CONTRACT_TYPES.SUPPLEMENT">待履行</p>
+          </template>
+          <template #paymentType="{ row }">
+            <p v-if="row.paymentType === CONTRACT_PAYMENT_TYPES.PAYMENT" class="payment-col">
+              付款
+              <trend class="dashboard-item-trend" type="up"/>
+            </p>
+            <p v-if="row.paymentType === CONTRACT_PAYMENT_TYPES.RECIPT" class="payment-col">
+              收款
+              <trend class="dashboard-item-trend" type="down"/>
+            </p>
+          </template>
 
+          <template #op="slotProps">
+            <a class="t-button-link" @click="handleClickDetail()">详情</a>
+            <a class="t-button-link" @click="handleClickDelete(slotProps)">删除</a>
+          </template>
+        </t-table>
+      </div>
     </t-card>
     <t-form :data="formData" ref="form" @submit="onSubmit">
       <t-drawer :visible.sync="visibleDrawer" header="新增菜单" :size="drawerSize" :closeBtn="true">
@@ -99,7 +143,7 @@ import {SearchIcon, AddIcon} from 'tdesign-icons-vue';
 
 
 const INITIAL_DATA = {
-  parentMenu: '根菜单',
+  parentMenu: 0,
   menuType: 1,
   menuName: '',
   url: '',
@@ -119,21 +163,7 @@ export default Vue.extend({
       visibleDrawer: false,
       drawerSize: '600px',
       searchValue: '',
-      parentMenuOptions:
-        [{
-          label: '系统管理',
-          value: 1,
-          children: [{
-            label: '用户管理',
-            value: 2,
-          }, {
-            label: '角色管理',
-            value: 3,
-          }, {
-            label: '菜单管理',
-            value: 4,
-          }],
-        }],
+      parentMenuOptions: [],
       menuTypeOptions: [
         {
           value: 1,
@@ -157,6 +187,49 @@ export default Vue.extend({
       statusRules: [{required: true, message: '菜单状态必选'}],
       sortRules: [{required: true, message: '菜单排序不能为空'}],
       iconRules: [{required: true, message: '菜单图标必选'}],
+      columns: [
+        {colKey: 'row-select', type: 'multiple', width: 64, fixed: 'left'},
+        {
+          title: '菜单名称',
+          align: 'left',
+          width: 250,
+          ellipsis: true,
+          colKey: 'name',
+          fixed: 'left',
+        },
+        {
+          title: '菜单类型',
+          width: 200,
+          ellipsis: true,
+          colKey: 'menuType',
+        },
+        {title: '菜单状态', colKey: 'status', width: 200, cell: {col: 'status'}},
+        {
+          title: '请求路径',
+          width: 200,
+          ellipsis: true,
+          colKey: 'url',
+        },
+        {
+          title: '页面地址',
+          width: 200,
+          ellipsis: true,
+          colKey: 'path',
+        },
+        {
+          title: '菜单排序',
+          width: 200,
+          ellipsis: true,
+          colKey: 'sort',
+        },
+        {
+          align: 'left',
+          fixed: 'right',
+          width: 200,
+          colKey: 'op',
+          title: '操作',
+        },
+      ],
       options: [
         {label: 'add-circle', value: 'add-circle'},
         {label: 'add-rectangle', value: 'add-rectangle'},
@@ -394,7 +467,7 @@ export default Vue.extend({
   },
   mounted() {
     this.dataLoading = true;
-
+    this.getMenuListTree()
   },
 
   methods: {
@@ -402,6 +475,41 @@ export default Vue.extend({
     openDrawer() {
       console.log("打开抽屉")
       this.visibleDrawer = true
+      this.getParentMenuListOptions();
+    },
+
+    // 获取树形结构菜单列表
+    getMenuListTree() {
+      this.$request
+        .post('/api/menu/list/tree')
+        .then((res) => {
+          if (res.code === 20000) {
+
+          }
+        })
+        .catch((e: Error) => {
+          console.log(e);
+        })
+        .finally(() => {
+          this.dataLoading = false;
+        });
+    },
+
+    // 获取上级菜单选项
+    getParentMenuListOptions() {
+      this.$request
+        .post('/api/menu/list/option/tree')
+        .then((res) => {
+          if (res.code === 20000) {
+            this.parentMenuOptions = res.data
+          }
+        })
+        .catch((e: Error) => {
+          console.log(e);
+        })
+        .finally(() => {
+          this.dataLoading = false;
+        });
     },
 
     // 提交表单
@@ -412,6 +520,7 @@ export default Vue.extend({
           .then((res) => {
             if (res.code === 20000) {
               this.$message.success(res.message);
+              this.visibleDrawer = false
             }
           })
           .catch((e: Error) => {
