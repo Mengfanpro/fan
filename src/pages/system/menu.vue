@@ -15,49 +15,30 @@
         </t-input>
       </t-row>
       <div class="table-container">
-        <t-table
+        <t-enhanced-table
+          row-key="menuId"
           :columns="columns"
-          :data="data"
-          :rowKey="rowKey"
-          :verticalAlign="verticalAlign"
-          :hover="hover"
-          :pagination="pagination"
+          :data="menuData"
+          :tree="{childrenKey: 'childrenList', checkStrictly: checkStrictly === 'true' ? true : false}"
           :selected-row-keys="selectedRowKeys"
-          :loading="dataLoading"
-          @page-change="rehandlePageChange"
-          @change="rehandleChange"
           @select-change="rehandleSelectChange"
-          :headerAffixedTop="true"
-          :headerAffixProps="{ offsetTop: offsetTop, container: getContainer }"
         >
+          <template #menuType="{ row }">
+            <t-tag v-if="row.menuType === 1" theme="success" variant="light">目录</t-tag>
+            <t-tag v-if="row.menuType === 2" theme="danger" variant="light">菜单</t-tag>
+            <t-tag v-if="row.menuType === 3" theme="warning" variant="light">按钮</t-tag>
+          </template>
+
           <template #status="{ row }">
-            <t-tag v-if="row.status === CONTRACT_STATUS.FAIL" theme="danger" variant="light">审核失败</t-tag>
-            <t-tag v-if="row.status === CONTRACT_STATUS.AUDIT_PENDING" theme="warning" variant="light">待审核</t-tag>
-            <t-tag v-if="row.status === CONTRACT_STATUS.EXEC_PENDING" theme="warning" variant="light">待履行</t-tag>
-            <t-tag v-if="row.status === CONTRACT_STATUS.EXECUTING" theme="success" variant="light">履行中</t-tag>
-            <t-tag v-if="row.status === CONTRACT_STATUS.FINISH" theme="success" variant="light">已完成</t-tag>
-          </template>
-          <template #contractType="{ row }">
-            <p v-if="row.contractType === CONTRACT_TYPES.MAIN">审核失败</p>
-            <p v-if="row.contractType === CONTRACT_TYPES.SUB">待审核</p>
-            <p v-if="row.contractType === CONTRACT_TYPES.SUPPLEMENT">待履行</p>
-          </template>
-          <template #paymentType="{ row }">
-            <p v-if="row.paymentType === CONTRACT_PAYMENT_TYPES.PAYMENT" class="payment-col">
-              付款
-              <trend class="dashboard-item-trend" type="up"/>
-            </p>
-            <p v-if="row.paymentType === CONTRACT_PAYMENT_TYPES.RECIPT" class="payment-col">
-              收款
-              <trend class="dashboard-item-trend" type="down"/>
-            </p>
+            <p v-if="row.status === 0" class="status unhealth">隐藏</p>
+            <p v-if="row.status === 1" class="status">显示</p>
           </template>
 
           <template #op="slotProps">
-            <a class="t-button-link" @click="handleClickDetail()">详情</a>
+            <a class="t-button-link" @click="handleClickEdit(slotProps)">编辑</a>
             <a class="t-button-link" @click="handleClickDelete(slotProps)">删除</a>
           </template>
-        </t-table>
+        </t-enhanced-table>
       </div>
     </t-card>
     <t-form :data="formData" ref="form" @submit="onSubmit">
@@ -134,13 +115,23 @@
         </template>
       </t-drawer>
     </t-form>
+    <t-dialog
+      theme="warning"
+      header="系统提示"
+      body="确定删除该条菜单信息吗？"
+      :visible.sync="deleteDialog"
+      @confirm="onConfirmDelete"
+      :onClose="onCloseDeleteDialog"
+    >
+    </t-dialog>
   </div>
 </template>
 
 <script lang="ts">
 import Vue from 'vue';
+import {EnhancedTable} from 'tdesign-vue';
 import {SearchIcon, AddIcon} from 'tdesign-icons-vue';
-
+import cloneDeep from 'lodash/cloneDeep';
 
 const INITIAL_DATA = {
   parentMenu: 0,
@@ -156,9 +147,10 @@ const INITIAL_DATA = {
 export default Vue.extend({
   name: 'MenuIndex',
   components: {
-    SearchIcon, AddIcon
+    SearchIcon, AddIcon, TEnhancedTable: EnhancedTable
   },
   data() {
+    let deleteMenuId;
     return {
       visibleDrawer: false,
       drawerSize: '600px',
@@ -187,6 +179,11 @@ export default Vue.extend({
       statusRules: [{required: true, message: '菜单状态必选'}],
       sortRules: [{required: true, message: '菜单排序不能为空'}],
       iconRules: [{required: true, message: '菜单图标必选'}],
+      menuData: [],
+      checkStrictly: 'true',
+      selectedRowKeys: [],
+      deleteDialog: false,
+      deleteMenuId,
       columns: [
         {colKey: 'row-select', type: 'multiple', width: 64, fixed: 'left'},
         {
@@ -194,7 +191,7 @@ export default Vue.extend({
           align: 'left',
           width: 250,
           ellipsis: true,
-          colKey: 'name',
+          colKey: 'menuName',
           fixed: 'left',
         },
         {
@@ -460,6 +457,13 @@ export default Vue.extend({
       ],
     };
   },
+  watch: {
+    // 切换模式，重置数据，避免互相影响
+    checkStrictly() {
+      this.selectedRowKeys = [];
+      this.data = cloneDeep(data);
+    },
+  },
   computed: {
     offsetTop() {
       return this.$store.state.setting.isUseTabsRouter ? 48 : 0;
@@ -484,7 +488,7 @@ export default Vue.extend({
         .post('/api/menu/list/tree')
         .then((res) => {
           if (res.code === 20000) {
-
+            this.menuData = res.data
           }
         })
         .catch((e: Error) => {
@@ -512,6 +516,44 @@ export default Vue.extend({
         });
     },
 
+    rehandleSelectChange(value, {selectedRowData}) {
+      this.selectedRowKeys = value;
+      console.log(value, selectedRowData);
+    },
+
+    handleClickEdit(slotProps) {
+      console.log("编辑菜单", slotProps)
+    },
+
+    handleClickDelete(slotProps) {
+      this.deleteMenuId = slotProps.row.menuId
+      this.deleteDialog = true
+    },
+
+    // 确认删除
+    onConfirmDelete() {
+      let menuId = this.deleteMenuId;
+      this.$request
+        .post('/api/menu/delete', {
+          menuId
+        })
+        .then((res) => {
+          if (res.code === 20000) {
+            this.$message.success(res.message);
+          }
+        })
+        .catch((e: Error) => {
+          console.log(e);
+        })
+        .finally(() => {
+          this.dataLoading = false;
+        });
+    },
+
+    onCloseDeleteDialog() {
+      console.log("取消删除")
+    },
+
     // 提交表单
     onSubmit({validateResult, firstError}) {
       if (validateResult === true) {
@@ -521,6 +563,7 @@ export default Vue.extend({
             if (res.code === 20000) {
               this.$message.success(res.message);
               this.visibleDrawer = false
+              this.getMenuListTree()
             }
           })
           .catch((e: Error) => {
@@ -590,5 +633,40 @@ export default Vue.extend({
 .tdesign-demo-select__overlay-option .t-select__groups {
   display: flex !important;
   flex-wrap: wrap !important;
+}
+
+.status {
+  position: relative;
+  color: #00a870;
+  margin-left: 10px;
+
+  &::before {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    content: '';
+    background-color: #00a870;
+    width: 6px;
+    height: 6px;
+    margin-left: -10px;
+    border-radius: 50%;
+  }
+}
+
+.status.unhealth {
+  color: #e34d59;
+
+  &::before {
+    background-color: #e34d59;
+  }
+}
+
+.status.warning {
+  color: #ed7b2f;
+
+  &::before {
+    background-color: #ed7b2f;
+  }
 }
 </style>
