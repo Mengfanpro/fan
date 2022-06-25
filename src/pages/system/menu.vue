@@ -200,7 +200,7 @@ export default Vue.extend({
           ellipsis: true,
           colKey: 'menuType',
         },
-        {title: '菜单状态', colKey: 'status', width: 200, cell: {col: 'status'}},
+        {title: '菜单状态', colKey: 'status', width: 100, cell: {col: 'status'}},
         {
           title: '请求路径',
           width: 200,
@@ -209,7 +209,7 @@ export default Vue.extend({
         },
         {
           title: '页面地址',
-          width: 200,
+          width: 300,
           ellipsis: true,
           colKey: 'path',
         },
@@ -533,6 +533,7 @@ export default Vue.extend({
     // 确认删除
     onConfirmDelete() {
       let menuId = this.deleteMenuId;
+      this.deleteDialog = false
       this.$request
         .post('/api/menu/delete', {
           menuId
@@ -540,6 +541,7 @@ export default Vue.extend({
         .then((res) => {
           if (res.code === 20000) {
             this.$message.success(res.message);
+            this.getMenuListTree()
           }
         })
         .catch((e: Error) => {
